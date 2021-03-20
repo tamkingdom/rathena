@@ -30,7 +30,7 @@ struct homun_skill_tree_entry hskill_tree[MAX_HOMUNCULUS_CLASS][MAX_HOM_SKILL_TR
 
 static TIMER_FUNC(hom_hungry);
 static uint16 homunculus_count;
-static unsigned int hexptbl[MAX_LEVEL];
+static t_exp hexptbl[MAX_LEVEL];
 
 //For holding the view data of npc classes. [Skotlex]
 static struct view_data hom_viewdb[MAX_HOMUNCULUS_CLASS];
@@ -669,7 +669,7 @@ int hom_mutate(struct homun_data *hd, int homun_id)
 * @param hd
 * @param exp Added EXP
 */
-void hom_gainexp(struct homun_data *hd,int exp)
+void hom_gainexp(struct homun_data *hd,t_exp exp)
 {
 	int m_class;
 
@@ -906,7 +906,10 @@ static TIMER_FUNC(hom_hungry){
 	}
 
 	clif_send_homdata(sd,SP_HUNGRY,hd->homunculus.hunger);
-	hd->hungry_timer = add_timer(tick+hd->homunculusDB->hungryDelay,hom_hungry,sd->bl.id,0); //simple Fix albator
+
+	int hunger_delay = (battle_config.homunculus_starving_rate > 0 && hd->homunculus.hunger <= battle_config.homunculus_starving_rate) ? battle_config.homunculus_starving_delay : hd->homunculusDB->hungryDelay; // Every 20 seconds if hunger <= 10
+
+	hd->hungry_timer = add_timer(tick+hunger_delay,hom_hungry,sd->bl.id,0); //simple Fix albator
 	return 0;
 }
 
@@ -1057,8 +1060,11 @@ void hom_alloc(struct map_session_data *sd, struct s_homunculus *hom)
 */
 void hom_init_timers(struct homun_data * hd)
 {
-	if (hd->hungry_timer == INVALID_TIMER)
-		hd->hungry_timer = add_timer(gettick()+hd->homunculusDB->hungryDelay,hom_hungry,hd->master->bl.id,0);
+	if (hd->hungry_timer == INVALID_TIMER) {
+		int hunger_delay = (battle_config.homunculus_starving_rate > 0 && hd->homunculus.hunger <= battle_config.homunculus_starving_rate) ? battle_config.homunculus_starving_delay : hd->homunculusDB->hungryDelay; // Every 20 seconds if hunger <= 10
+
+		hd->hungry_timer = add_timer(gettick()+hunger_delay,hom_hungry,hd->master->bl.id,0);
+	}
 	hd->regen.state.block = 0; //Restore HP/SP block.
 	hd->masterteleport_timer = INVALID_TIMER;
 }
@@ -1305,7 +1311,6 @@ int hom_shuffle(struct homun_data *hd)
 {
 	struct map_session_data *sd;
 	int lv, i, skillpts;
-	unsigned int exp;
 	struct s_skill b_skill[MAX_HOMUNSKILL];
 
 	if (!hom_is_active(hd))
@@ -1313,7 +1318,7 @@ int hom_shuffle(struct homun_data *hd)
 
 	sd = hd->master;
 	lv = hd->homunculus.level;
-	exp = hd->homunculus.exp;
+	t_exp exp = hd->homunculus.exp;
 	memcpy(&b_skill, &hd->homunculus.hskill, sizeof(b_skill));
 	skillpts = hd->homunculus.skillpts;
 	//Reset values to level 1.
@@ -1613,7 +1618,7 @@ void read_homunculus_expdb(void)
 			if (line[0] == '/' && line[1] == '/')
 				continue;
 
-			hexptbl[j] = strtoul(line, NULL, 10);
+			hexptbl[j] = strtoull(line, NULL, 10);
 			if (!hexptbl[j++])
 				break;
 		}
